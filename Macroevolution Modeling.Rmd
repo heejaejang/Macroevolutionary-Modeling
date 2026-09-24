@@ -1,520 +1,156 @@
 ---
-title: "EEB362 Tutorial 4"
-author: "Sean Anderson, Luke Mahler, and Jill Sanderson"
-date: "November 2, 2020, updated by Jill October 2021, Luke October 2022"
-output:
-  pdf_document: default
-  html_document: default
-  word_document: default
+title: "Macroevolutionary Modeling of Continuous Trait Evolution"
+author: "Jay Heejae Jang"
+output: github_document
 ---
 
-Install packages
 ```{r setup, include=FALSE}
-# install.packages("plotrix")
-# install.packages("phytools")
-# install.packages("TreeSim")
-# install.packages("animation")
-# install.packages("diverge")
-```
 
-Load packages
-```{r}
-library(plotrix)
-library(phytools)
-library(TreeSim)
-library(animation)
-library(diverge)
-graphics.off()
+required_packages <- c("plotrix", "phytools", "TreeSim", "animation", "diverge", "tidyverse")
+new_packages <- required_packages[!(required_packages %in% installed.packages()[, "Package"])]
+if (length(new_packages) > 0) install.packages(new_packages)
+
+invisible(lapply(required_packages, library, character.only = TRUE))
+
+# Set a clean global theme for ggplot2
+theme_set(theme_minimal() + theme(panel.grid.minor = element_blank()))
 ```
 
 
-In this tutorial we'll discuss continous trait evolution and introduce the most basic statistical model of this process --- the Brownian motion model. By the end of this tutorial you'll be able to:
-
-1. Define a continuous trait
-2. Simulate a Brownian motion process and understand its basic properties
-3. Simulate Brownian motion evolution through a branching lineage
-4. Understand the difference between Brownian motion and Ornstein-Uhlenbeck processes
-
-## Preamble: Continuous Traits, Phenomenological Models, and Stochastic Processes
-
-Recall that a continuous trait is a trait that does not jump between values as it changes. For example, a palm tree will not jump from being 10 feet tall to 11 feet tall - as it grows, it passes through each value between these numbers. Height is thus a continuous trait. Traits such as limb length, root depth, or beak width are continuous. Traits such as number of molars and pollination type are discrete.
-
-The values of continuous traits ultimately evolve due to microevolutionary processes - that is, changes in allele frequencies in populations due to migration, mutation, selection, and drift. Explicit mathematical models can be used to understand continuous trait evolution in populations over microevolutionary timescales based on the relative strength of these 4 processes and attributes of the population (such as population size, trait heritability between generations, etc.). Such models are routinely used in the subfields of population genetics and quantitative genetics, which are concerned with the study of evolution over relatively short periods.
-
-At the macroevolutionary scale, however, two factors complicate the analysis of continuous trait evolution. First, we're usually interested in the change of a trait in entire species lineages, not populations. Second, we're interested in the evolution of a trait across timescales that are enormous relative to an organism's generation time. For example, we may be interested in changes in the AVERAGE beak length in a species of finch over 10 million years, where that species has been comprised of many populations that have variously arisen, fused, and gone extinct over many tens of thousands of generations. It is therefore impossible to analyze this process using explicit population genetic models. 
-
-Our solution in macroevolution is to use statistcal models of continuous trait change that APPROXIMATE the behaviour we would expect to see under certain evolutionary processes over long periods of time. These models are called 'phenomenological' models, meaning they are not derived directly from first principles (i.e., laws of population genetics), but they are broadly consistent with those principles. 
-
-The phenomenological models we use to study continuous trait evolution over macroevolutionary timescales are called 'stochastic process models'. These are mathematical models in which the change in a trait over large timescales involves some degree of randomness (note that some microevolutionary models also incorporate stochastic processes). The models can't tell us what the exact value of a species mean trait will be after some time period, but they can tell us what the statistical distribution of mean trait values will look like if we were to allow the trait to evolve many many times under a given process. The statistical approximation of trait evolution through time is the core practice of macroevolutionary analysis of phenotypes.
-
-Before we get started, we need to change an R Markdown setting to ensure that our plots function properly. In the top toolbar of R Studio, go to RStudio -> Preferences -> R Markdown and then uncheck the box that says "Show output inline for all R Markdown documents". 
-
-## Exercise 1: Simulating the Brownian motion process in a lineage
-
-The simplest stochastic process model is the Brownian motion (BM) model. BM is the grandfather of all models of continuous trait evolution.
-
-The BM process is an unconstrained random walk, meaning that trait values are free to roam in different directions.
-
-We'll learn how it works by simulating BM evolution "from scratch".
-
-#### 1A. A random walk for a trait in a single lineage
-
-To examine BM evolution, it helps to break up evolutionary time into a series of small steps and observe how the trait changes across those steps. 
-First, how long will our BM walk be, in steps?
+## In a Brownian motion model, the variance parameter (σ²) represents the evolutionary rate at which trait variance accumulates through time.The simulations below track cumulative BM random walks from an ancestral mysticete body size (4 m) under two distinct variance regimes over 100 time steps.
 
 ```{r}
-time_steps = 10
+
+set.seed(123)
+
+n_step <- 100
+start_point <- 4
+
+# Generate normal distributions for step changes
+normal1 <- rnorm(n_step, mean = 0, sd = 4)
+normal2 <- rnorm(n_step, mean = 0, sd = 1)
+
+random_walk1 <- cumsum(c(start_point, normal1))
+random_walk2 <- cumsum(c(start_point, normal2))
+
+# Adjust inner margins to prevent squeezed labels
+par(mfrow = c(2, 1), mar = c(4, 4, 2, 1)) 
+
+plot(random_walk1, type = 'l', col = 'dodgerblue3', lwd = 2,
+     xlab = "Time", ylab = "Phenotypic Value", 
+     main = "High Variance Regime (\u03c3 = 4)")
+
+plot(random_walk2, type = 'l', col = 'deeppink3', lwd = 2,
+     xlab = "Time", ylab = "Phenotypic Value", 
+     main = "Low Variance Regime (\u03c3 = 1)")
+
+par(mfrow = c(1, 1))
 ```
 
-Next, let's pull this number of random draws from a normal distribution. Each draw will give us the direction (+ or -) and magnitude of change of that step. For this we can use the 'rnorm' function, which draws a Random number from a NORMal distribution. 
-
-For this function, we have to state 2 arguments: the mean and standard deviation (sd) of the normal distribution. 
-
-In a BM process, the MEAN VALUE OF TRAIT CHANGE IS ALWAYS 0. 
-
-*In class you learned that BM has three key features. Which of these features does this relate to?*
-
-
-The standard deviation of our normal distribution of potential changes is directly related to the macroevolutionary parameter "sigma squared", denoted sig2, which is the only parameter in the BM model. 
-
-This parameter is known as the 'instantaneous variance parameter' or the 'Brownian motion dispersion parameter', and it describes the variance of the trait change in each time step. 
-Importantly, in our phenomenonological BM model, the sig2 parameter reflects the instantaneous rate of evolutionary change. 
-
-Remember, sig2 is that scaling parameter for the normal distribution, it changes how wide or narrow the distribution of change is that we are sampling from.
-
-Note however that the rnorm function requires standard deviation, not variance, so we'll give it the sd by taking the square root of the sig2 parameter (recall that standard deviation is simply the square root of variance).
+## To model clade-wide diversification, we simulate 76 independent evolutionary trajectories from a common ancestral state.
 
 ```{r}
-sig2 = 1
-B1 = rnorm(time_steps, mean=0, sd=sqrt(sig2))
-B1
-```
+set.seed(456)
+n_species <- 76
+n_steps <- 100
+ancestral_size <- 4
 
-So we have the BM changes in each time step. 
-
-Now, let's use this information to calculate our trait values in each step (which is equal to our starting value - which you'll recall is zero - plus the sum of the changes from all preceding steps). 
-
-Starting with trait value 0, we'll cumulatively add these changes, in order. We can do this for the entire BM walk using the cumulative sum command "cumsum". 
-
-```{r}
-Brownian_motion = cumsum(c(0, B1))
-Brownian_motion
-```
-
-Now let's plot our BM random walk. First we'll define the upper and lower limits of the y-axis (these limits don't constrain our random walk, so feel free to change them).
-
-```{r}
-yl = range(-5,5)
-```
-	
-Then, we'll make the plot.
-For this we're using the matplot function, which just plot the columns of one matrix against the columns of another (which often is just a vector treated as 1-column matrix).
-
-```{r}
-par(mfrow=c(2,1)) # this tells R to create a plot window that will contain two plots - you'll see why in the next step
-matplot(x=c(0:time_steps), y=Brownian_motion, ylim = yl, type = "l", main = NA, xlab = "Time",ylab="Phenotype")
-#just put the upper and lower limits of the plot so that we can get a nicer look, instead of the limits being set by the data itself
-
-# We can color the individual steps using the line segment color plotting function below:
-color.scale.lines(x=c(0:time_steps),y=Brownian_motion,reds=c(1,1,0),greens=0,blues=c(0,1,1),col=1:time_steps,lwd=2)
-```
-		
-*Looking at this plot we can see two of the three key features of Brownian Motion, what are they?*
-
-
-		
-Now we can look at the values of trait evolution we found in each time step and see how they relate to the underlying normal distribution from which they were drawn. 
-
-First, we'll plot a histogram with the values of a random normal distribution and simultaneously store it as the variable "normal".
-
-```{r}
-normal<-hist(rnorm(10000,mean=0,sd=sqrt(sig2)),breaks=30,xlab="value of Brownian trait change", main = NA, col="darkgrey",border=NA)
-
-# Then we'll overlay the lines indicating our random draws from this distribution. Note that we use information from "normal" to indicate the height of the lines we draw.
-for(i in 1:time_steps){
-	lines(x=c(B1[i],B1[i]),y=c(0,max(normal$counts)),col=i,lwd=2)
-}
-```
-
-Reset the plotting window.
-
-```{r}
-par(mfrow=c(1,1))
-```
-	
-#### 1B. Many replicates of the random walks for a trait in single lineage
-
-*If we simulate a random walk over and over again, it should be easy to appreciate the three key features of Brownian motion. What are they?*
-
-
-
-Let's explore these features by making many replicates of the random walks for a trait in single lineage. First we'll repeat the steps above by drawing values of trait change in each time step and calculating the cumulative sum
-
-```{r}
-#just going to overwrite our old objects with new data
-time_steps = 30 #more time steps
-sig2=0.09 #much lower evolutionary rate
-start_point=0 #start point the same
-B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-Brownian_motion = cumsum(c(0, B1))
-```
-
-Then we'll plot the change in trait in this one lineage
-
-```{r}
-yl = range(-6,6)
-plot(x=c(0:time_steps), y=Brownian_motion, ylim = yl, type = "l", main = NA, xlab = "Time", ylab="Trait Value")
-
-# Now we can repeat the above steps for N replicates using a "for" loop. The basic structure of a loop is “for each element in a data container, perform some operation and place the outcome in my results container”.
-
-# For convenience, we can store the trait values through time for each replicate in a matrix.
-# Each column in the matrix will represent trait values at one time step.
-# Each row in the matrix will represent the trait value through time for one replicate lineage.
-
-N=500  # this defines the number of replicates (or number of times we're gonna run the model) - feel free to play around with this (e.g. try values of 20, values of 1000). # use graphics.off() to clear plotting window before doing this
-Brownian_motion = matrix(nrow=N, ncol=time_steps+1)
-for(i in 1:N){
-	B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-	Brownian_motion[i,] = cumsum(c(start_point, B1))
-	lines(c(0:time_steps),Brownian_motion[i,],lwd=2,col=i)
+# Generate matrix of evolutionary pathways
+sim_clade <- function(sd_val) {
+  replicate(n_species, cumsum(c(ancestral_size, rnorm(n_steps, 0, sd = sd_val)))) %>%
+    as.data.frame() %>%
+    mutate(Time = 0:n_steps) %>%
+    pivot_longer(-Time, names_to = "Lineage", values_to = "Trait_Value")
 }
 
-# To help visualize the next question, place some vertical lines through time steps 5, 15, and 25
-abline(v=c(5, 15, 25), col="red")
+clade_high <- sim_clade(sd_val = 4) %>% mutate(Regime = "High Rate (Var = 16)")
+clade_low  <- sim_clade(sd_val = 1) %>% mutate(Regime = "Low Rate (Var = 1)")
+clade_combined <- bind_rows(clade_high, clade_low)
+
+# Plot clade disparity
+ggplot(clade_combined, aes(x = Time, y = Trait_Value, group = Lineage)) +
+  geom_line(alpha = 0.15, color = "midnightblue") +
+  facet_wrap(~Regime) +
+  labs(title = "Simulated Clade Disparity (76 Independent Lineages)",
+       x = "Time Steps", y = "Body Length (m)")
 ```
 
-*Can you identify any features of the BM process from looking at these replicates? Does the distribution appear the same or does it change between time steps 5, 15, and 25?*
-
-
-Let's have a closer look at the distribution of trait values at these different time points
+## Evolution occurs along branching phylogenetic trees. Here, the BM process is projected onto simulated birth-death trees for pan-group (20 Myr) and crown-group (10 Myr) mysticetes. We map empirical data for modern giant genera alongside the simulated trait space to visualize how their observed body sizes compare with BM simulations.
 
 ```{r}
-par(mfrow=c(3,1))
+set.seed(6)
 
-#Set upper and lower bounds on the x-axis that you'll use for each plot
-xl = c(-6, 6)
+# Simulate phylogenetic trees
+crown_tree <- sim.bd.age(age = 10, numbsim = 1, lambda = 0.2, mu = 0.05)[[1]]
+pan_tree   <- sim.bd.age(age = 20, numbsim = 1, lambda = 0.2, mu = 0.05)[[1]]
 
-#Plot histograms of the trait values at each of the three time points across replicates
-dist_timestep5 = hist(Brownian_motion[,6], breaks=20, freq=F, xlim=xl, xlab="Trait Value at Time Step 5", main=NA)
-dist_timestep15 = hist(Brownian_motion[,16], breaks=20, freq=F, xlim=xl, xlab="Trait Value at Time Step 15", main=NA)
-dist_timestep25 = hist(Brownian_motion[,26], breaks=20, freq=F, xlim=xl, xlab="Trait Value at Time Step 25", main=NA)
+# Simulate traits (Body Length: Var=1, Ancestor=4 | Tail Length: Var=0.5, Ancestor=2)
+phylo_data <- bind_rows(
+  tibble(
+    Group = "Pan-group (Simulated)",
+    Body_Length = fastBM(pan_tree, sig2 = 1, a = 4),
+    Tail_Length = fastBM(pan_tree, sig2 = 0.5, a = 2)
+  ),
+  tibble(
+    Group = "Crown-group (Simulated)",
+    Body_Length = fastBM(crown_tree, sig2 = 1, a = 4),
+    Tail_Length = fastBM(crown_tree, sig2 = 0.5, a = 2)
+  )
+)
+
+# Empirical body and tail length values based on Slater et al. (2017).
+empirical_data <- tibble(
+  Group = c("Eubalaena (Empirical)", "Balaenoptera (Empirical)"),
+  Body_Length = c(16, 24),    
+  Tail_Length = c(3, 5))
+
+all_traits <- bind_rows(phylo_data, empirical_data)
+
+ggplot(all_traits, aes(x = Body_Length, y = Tail_Length, color = Group, shape = Group, size = Group)) +
+  geom_point(alpha = 0.8) +
+  scale_color_manual(values = c("turquoise", "violet", "pink", "blue")) +
+  scale_shape_manual(values = c(18, 18, 17, 16)) +
+  scale_size_manual(values = c(5, 5, 2, 2)) +
+  labs(title = "Phylogenetic Trait Space: Simulated vs. Empirical",
+       x = "Body Length (m)", y = "Tail Length (m)") +
+  theme(legend.position = "bottom", legend.title = element_blank())
 ```
 
-From the above visualizations, a couple of features should start to become clear:
-(1.) The mean trait value doesn't change through time under a BM process; it remains at (or very near to) zero. 
-(2.) The variance in trait values increase with time (i.e. the distributions get wider as you go from step 5 to 15 to 25).
 
-We can actually plot these values through time to see trends 1 and 2 more clearly.
+## Below, 50 independent lineages are simulated evolving toward an adaptive optimum of 10 over 25 time steps, contrasting strong vs. weak selective pull using Ornstein-Uhlenbeck (OU) Models
 
 ```{r}
-par(mfrow = c(2,1), mar=c(4,4,1,3))
-plot(x=1:ncol(Brownian_motion), y=apply(Brownian_motion, 2, mean), ylim=c(-1,1), ylab="trait mean", xlab="time step")
-plot(x=1:ncol(Brownian_motion), y=apply(Brownian_motion, 2, var), ylim=c(0,4), ylab="trait variance", xlab="time step")
 
-# add a line with slope equal to the Brownian motion rate (i.e., sig2) to the plot of accumulated variance over time to get a sense of the relationship between sig2 and variance
-curve(expr = x*sig2, col="red", add=TRUE)
-```
+set.seed(999)
+N <- 50 
+steps <- 25 
+theta <- 10     # Adaptive optimum
+sig2 <- 1       # Rate of evolution
 
-*How does the variance increase with time in a BM process (i.e. linearly? logarithmically? exponentially?)*
+par(mfrow = c(1, 2))
+
+# Strong Selection
+rw_ou_strong <- random_walks(model="OU_null", TIME = steps, steps = steps, nsim = N, 
+                            sig2 = sig2, alpha = 1, theta = theta,
+                            plot=TRUE, col=rep("darkslategrey", N), ylim=c(0,20), labels=FALSE)
+axis(1, at=seq(0, 25, 5), labels=seq(0, 25, 5))            
+title(xlab="Time Steps", ylab="Trait Value", main = 'Strong Optimum (\u03b1 = 1.0)') 
+abline(h = theta, col = "red", lty = 2, lwd = 2)
+
+# Weak Selection
+rw_ou_weak <- random_walks(model="OU_null", TIME = steps, steps = steps, nsim = N, 
+                          sig2 = sig2, alpha = 0.1, theta = theta,
+                          plot=TRUE, col=rep("darkslategrey", N), ylim=c(0,20), labels=FALSE)
+axis(1, at=seq(0, 25, 5), labels=seq(0, 25, 5))              
+title(xlab="Time Steps", ylab="Trait Value", main = 'Weak Optimum (\u03b1 = 0.1)') 
+abline(h = theta, col = "red", lty = 2, lwd = 2)
+
+par(mfrow = c(1, 1))
 
 
-*We simulated these data using a BM dispersion (or rate) parameter (i.e. "sigma squared", denoted sig2) of 0.09. How does the variance of the trait value through time relate to this parameter?*
-
-
-
-#### 1C. Playing with the BM model
-
-If you're having trouble recognizing the 3 features of a BM process we talked about, try making the 4-panel plot below. The first panel will reproduce the plot you just made. Each of the other three will have a changed parameter that should illustrate a key feature of BM. Make sure you understand each.
-
-```{r}
-par(mfrow=c(2,2))
-
-# First panel
-time_steps = 30
-sig2=0.09
-start_point=0
-B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-Brownian_motion = cumsum(c(start_point, B1))
-yl = range(-6,6)
-matplot(x=c(0:time_steps), y=Brownian_motion, ylim = yl, type = "l", main = NA, xlab = "Time", ylab="Trait Value")
-for(i in 1:100){
-	B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-	Brownian_motion = cumsum(c(start_point, B1))
-	lines(c(0:time_steps),Brownian_motion,lwd=2,col=i)
-}	
-
-# Second panel
-time_steps = 30
-sig2=0.25  # here the variance of the change at each time step is higher than in the first sim
-start_point=0
-B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-Brownian_motion = cumsum(c(start_point, B1))
-yl = range(-6,6)
-matplot(x=c(0:time_steps), y=Brownian_motion, ylim = yl, type = "l", main = NA, xlab = "Time", ylab="Trait Value")
-for(i in 1:100){
-	B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-	Brownian_motion = cumsum(c(start_point, B1))
-	lines(c(0:time_steps),Brownian_motion,lwd=2,col=i)
-}	
-
-# Third panel
-time_steps = 45  # here the number of time steps is higher than in the first sim
-sig2=0.09
-start_point=0
-B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-Brownian_motion = cumsum(c(start_point, B1))
-yl = range(-6,6)
-matplot(x=c(0:time_steps), y=Brownian_motion, ylim = yl, type = "l", main = NA, xlab = "Time", ylab="Trait Value")
-for(i in 1:100){
-	B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-	Brownian_motion = cumsum(c(start_point, B1))
-	lines(c(0:time_steps),Brownian_motion,lwd=2,col=i)
-}	
-
-# Fourth panel
-time_steps = 30
-sig2=0.09
-start_point=2  # here the starting value of the trait is 2 instead of 0 in the first sim
-B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-Brownian_motion = cumsum(c(start_point, B1))
-yl = range(-6,6)
-matplot(x=c(0:time_steps), y=Brownian_motion, ylim = yl, type = "l", main = NA, xlab = "Time", ylab="Trait Value")
-for(i in 1:100){
-	B1 = rnorm(time_steps,mean=0,sd=sqrt(sig2))
-	Brownian_motion = cumsum(c(start_point, B1))
-	lines(c(0:time_steps),Brownian_motion,lwd=2,col=i)
-}	
 
 ```
 
-*Be sure to look CLOSELY at these plots to appreciate the differences. E.g., does the size of the random shift differ in any of them?*
+## References
 
-
-Reset the plotting window.
-```{r}
-par(mfrow=c(1,1))		
-```
-
-
-
-## Exercise 2: The Brownian motion process in a branching lineage - Let's add a tree!
-
-Of course, our interest in the Brownian motion model is for its application to trait evolution in a diversifying lineage. Now, we'll look explicitly at BM evolution in a phylogenetic tree.
-	
-We'll start by simulating a random walk in a branching lineage. We're not going to do this one by scratch - we'll use a function from Liam Revell's "phytools" package, which animates the branching process.
-
-```{r eval=F}
-branching.diffusion(sig2=0.1,b=0.023,time.stop=100,ylim=NULL,smooth=FALSE,pause=0.1,record=NULL,path=NULL)		
-```
-
-Here we can see that lineage diversification leads to the accumulation of trait variance over time under the BM model, much in the way that we observed an increase in variance with time when we repeated Brownian motion simulations independently from a common starting point. The structure of the phylogenetic tree, however, makes a big difference in how much variance accumulation we expect to observe.
-	
-Let's conduct one more set of simulations to explore how "tree shape" influences expected disparity. This time, we're going to start with known trees, and we'll simulate trait data using existing R packages.
-
-```{r}
-set.seed(3)
-```
-
-The line above sets R's random number generator to the start point '3'. A common start point is required so that we all work with the same values in this exercise.
-
-Now we can simulate a branching tree --- we will say that evolution occurs across 60 my and that the speciation rate is 0.1. Note that the speciation rate is in units of number of branching events per million years per lineage --- the more lineages that are present, the more branching events that are possible. 
-
-```{r}
-base.tree <- sim.bd.age(age=60, numbsim=1, lambda=0.1, mu=0) #note that mu is the extinction rate
-base.tree <- base.tree[[1]]		
-```
-
-Let's take a look at what type of object we've just created
-
-```{r}
-class(base.tree)		
-```
-
-This is a phylo object, which we've seen before.
-
-Now we'll take this tree, and WITHOUT CHANGING THE TOPOLOGY, we'll rescale it so that the branching events occur late. We'll use the delta tree rescaling parameter to do this. When delta = 1, no rescaling occurs. When delta < 1, the tree is rescaled so that branching events occur late (towards the tips), and when delta > 1, the tree is rescaled so that branching events occur relatively early (towards the root). Note that 'rescale' is a function in both the phytools and plotrix packages, but those functions do very different things. We can tell R which package's 'rescale' we're reerring to by using the :: operator
-
-```{r}
-tree1 <- phytools::rescale(base.tree, model="delta", 0.15)		
-```
-
-Next, we'll again take our starting tree, and without changing the topology, we'll rescale it so that the branching events occur early.
-
-```{r}
-tree2 <- phytools::rescale(base.tree,model="delta",5)		
-```
-
-Let's plot them to see the differences in "tree shape".
-
-```{r}
-par(mfrow=c(2,1), mar=c(1,1,1,1))
-plot(tree1,show.tip.label=F,edge.color="blue")
-plot(tree2,show.tip.label=F,edge.color="red")	
-```
-
-So we have two trees with identical topologies, but where the timing of divergence varies. How does this affect expected disparity?	That's what we're going to see. In this case, by 'disparity' we mean the total amount of 'trait space' occupied by a clade (note that there are other ways to measure disparity, which simply means trait diversity). 
-
-*So which tree shows taxa with more shared evolutionary history? Which shows more independent evolutionary history?*
-
-*Given this knowledge, if trait evolution occurs via Brownian motion, which tree would you expect to give rise to greater trait disparity?*
-
-
-We can simulate trait evolution across our two trees under a Brownian motion process using the function fastBM from the phytools package. 
-
-We'll simulate two traits for each clade and plot them against each other to visualize disparity. 
-Note that we are using a single instantaneous BM rate parameter (sig2=4) for every simulation, so the only thing that differs is the branching times of the trees (which, again, have identical topologies)
-
-```{r}
-par(mfrow=(c(1,1)))
-		
-tree1.trait1 <- fastBM(tree1, a=0, sig2=4, nsim=1) #a = the starting trait value (i.e., at the root node)
-tree1.trait2 <- fastBM(tree1, a=0, sig2=4, nsim=1)
-	
-tree2.trait1 <- fastBM(tree2, a=0, sig2=4, nsim=1)
-tree2.trait2 <- fastBM(tree2, a=0, sig2=4, nsim=1)
-
-plot(x=tree1.trait1,y=tree1.trait2,xlim=c(-30,30),ylim=c(-30,30),xlab="Trait 1",ylab="Trait 2",pch=16,col="blue")
-points(x=tree2.trait1,y=tree2.trait2,pch=16,col="red")
-
-#so each point here represents a species value for two traits (lets say height and limb length)
-
-# It's probably easier to visualize the difference in disparity this with 'minimum convex polygons', so let's plot some.
-
-mcp2 <- cbind(tree2.trait1,tree2.trait2)
-hull2 <- chull(mcp2)
-hull2 <- c(hull2, hull2[1])
-polygon(mcp2[hull2, ], density = NA, border = "lightcoral", col = "lightcoral")
-				
-mcp1 <- cbind(tree1.trait1,tree1.trait2)
-hull1 <- chull(mcp1)
-hull1 <- c(hull1, hull1[1])
-polygon(mcp1[hull1, ], density = NA, border = "deepskyblue", col = "deepskyblue")
-
-points(x=tree1.trait1,y=tree1.trait2,pch=16,col="blue")
-points(x=tree2.trait1,y=tree2.trait2,pch=16,col="red")
-```
-
-*Which tree produces greater disparity?*
-
-
-*If you wanted disparity to be similar for the blue clade and the red clade, what would you change about the Brownian motion model or the phylogeny?*
-
-
-
-
-## Exercise 3: The Ornstein-Uhlenbeck process in a single lineage
-
-While the Brownian Motion process is the grandfather of all macroevolutionary models of continuous traits, it is not the only model. A simple extension of the BM model is the Ornstein-Uhlenbeck model (OU).
-
-The OU process models a constrained random walk, unlike the BM process. In an OU process, the trait is effectively "pulled" toward a particular value, and the farther away it gets from this value, the stronger the pull becomes. Imagine an object that is tethered to a stationary point by a rubber band - this is a lot like how OU acts (e.g., the rubber band gets tighter, and exerts a stronger pull, with greater distance from the stationary point).
-
-This dynamic mimics what we would expect from adaptation, so we can use this model to approximate the evolution of a trait that is under natural selection towards some value that we interpret to be the long-term adaptive optimum.
-
-The OU model contains the same sig2 parameter as the BM model, but it also contains a second parameter, "alpha", which represents the strength of the constraint on the random walk, and a third parameter, "theta", which represents the optimum value around which evolution is constrained.
-		
-First we'll define the length of time over which to model evolution, the number of simulations, our model parameters, and the y-axis limits.
-
-```{r}
-time = 8
-N = 100
-sig2 = 0.09
-alpha = 0.4
-theta = 0
-yl = c(-2, 2)
-```
-
-Now we can simulate evolution under both a BM and OU model and plot the outcomes.
-Instead of doing this from scratch, we can use the random_walks function of the diverge package.
-Note that in the code below we introduce custom x-axes and use custom axis titles.
-
-```{r}
-par(mfrow=c(2,1), mar=c(4,4,1,1))
-# Brownian Motion
-rw_bm = random_walks(model="BM_null", TIME=time, steps=10, nsim=N, sig2=sig2, plot=TRUE, col=rep("black",2), ylim=yl, xaxt="n", labels=F)
-axis(1, at=seq(0, 80, 20), labels=seq(0, 8, 2))
-title(xlab="Time (Ma)", ylab="Trait Value")
-
-#Ornstein-Uhlenbeck
-rw_ou = random_walks(model="OU_null", TIME=time, steps=10, nsim=N, sig2=sig2, alpha=alpha, theta = theta, plot=TRUE, col=rep("black",2), ylim=yl, xaxt="n", labels=F)
-axis(1, at=seq(0, 80, 20), labels=seq(0, 8, 2))
-title(xlab="Time (Ma)", ylab="Trait Value")
-```
-
-We can see from this visualization that the alpha parameter constrains the random walk of our trait around the value 0, which we defined as the optimum value (theta). 
-
-*How does the OU model differ from the BM model in terms of the relationship between variance and time?* Hint: try plotting the following:
-
-```{r}
-par(mfrow=c(2,1), mar=c(4,4,1,1))
-plot(x=1:80, apply(rw_bm, 2, var), xlab = "Time", ylab="Variance")
-plot(x=1:80, y=apply(rw_ou, 2, var),  xlab = "Time", ylab="Variance")
-```
-
-
-Now let's finish off by repeating the OU simulations but with different model parameters 
-
-```{r}
-par(mfrow=c(2,2), mar=c(4,4,2,2))
-
-# A. Original Parameters
-time = 8
-N = 50
-sig2 = 0.09
-alpha = 0.4
-theta = 0
-yl = c(-2, 2)
-		
-# simulate and plot
-rw_ou = random_walks(model="OU_null", TIME=time, steps=10, nsim=N, sig2=sig2, alpha=alpha, theta = theta, plot=TRUE, col=rep("black",2), ylim=yl, xaxt="n", labels=F)
-axis(1, at=seq(0, 80, 20), labels=seq(0, 8, 2))
-title(xlab="Time (Ma)", ylab="Trait Value")
-
-# B. Higher Alpha
-time = 8
-N = 100
-sig2 = 0.09
-alpha = 1.4
-theta = 0
-yl = c(-2, 2)
-		
-# simulate and plot
-rw_ou = random_walks(model="OU_null", TIME=time, steps=10, nsim=N, sig2=sig2, 
-alpha=alpha, theta = theta, plot=TRUE, col=rep("black",2), ylim=yl, xaxt="n", labels=F)
-axis(1, at=seq(0, 80, 20), labels=seq(0, 8, 2))
-title(xlab="Time (Ma)", ylab="Trait Value")
-
-# C. Alpha = 0
-time = 8
-N = 100
-sig2 = 0.09
-alpha = 0
-theta = 0
-yl = c(-2, 2)
-		
-# simulate and plot
-rw_ou = random_walks(model="OU_null", TIME=time, steps=10, nsim=N, sig2=sig2, alpha=alpha, theta = theta, plot=TRUE, col=rep("black",2), ylim=yl, xaxt="n", labels=F)
-axis(1, at=seq(0, 80, 20), labels=seq(0, 8, 2))
-title(xlab="Time (Ma)", ylab="Trait Value")
-
-# D. Theta = 1.5 and alpha = 0.8
-time = 8
-N = 100
-sig2 = 0.09
-alpha = 0.8
-theta = 1.5
-yl = c(-2, 3)
-		
-# Simulate and plot
-rw_ou = random_walks(model="OU_null", TIME=time, steps=10, nsim=N, sig2=sig2, alpha=alpha, theta = theta, plot=TRUE, col=rep("black",2), ylim=yl, xaxt="n", labels=F)
-axis(1, at=seq(0, 80, 20), labels=seq(0, 8, 2))
-title(xlab="Time (Ma)", ylab="Trait Value")
-
-```
-
-What you should be able to notice from the above visualizations is that when alpha = 0, the OU process becomes identical to a BM process. As alpha increases, the random walks are more tightly constrained about the optimum phenotype. 
-
-```{r}
-# Reset the plotting window
-par(mfrow=c(1,1), mar=c(5, 4, 4, 2)+0.1)
-```
-
+Slater, G. J., Goldbogen, J. A., & Pyenson, N. D. (2017). Independent evolution of baleen whale gigantism linked to Plio-Pleistocene ocean dynamics. *Proceedings of the Royal Society B: Biological Sciences, 284*(1855), 20170546. https://doi.org/10.1098/rspb.2017.0546
