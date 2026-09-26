@@ -4,6 +4,14 @@
 
 This project uses R to simulate and visualize continuous trait evolution under different evolutionary models. The analysis explores how evolutionary rate, phylogenetic history, and selection can influence patterns of phenotypic variation.
 
+## Files
+
+| File | Description |
+|---|---|
+| `Macroevolution_Modeling.Rmd` | Original analysis in R |
+| `Macroevolutionary_Modeling.ipynb` | Python port (numpy / pandas / matplotlib) |
+
+
 ## Models and Analysis
 
 ### Brownian Motion
